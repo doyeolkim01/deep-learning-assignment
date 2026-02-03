@@ -94,7 +94,7 @@ class MoCo(nn.Module):
         
         # compute contrastive loss
         positive_logits = (q * k).sum(dim=1, keepdim=True)              # (B, 1)
-        negative_logits = q @ self.queue.clone().detach()                       # (B, queue_size)
+        negative_logits = q @ self.queue.clone().detach()               # tensor copy  and detach, (B, queue_size)
         logits = torch.cat([positive_logits, negative_logits], dim=1)   # (B, 1+queue_size)
         logits /= self.temperature
         
