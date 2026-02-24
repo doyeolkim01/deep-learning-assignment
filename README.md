@@ -1,8 +1,10 @@
 # Experimental Results
 
+---
+
 ## Supervised Learning
 
-**Command**
+### Command
 
 ```bash
 python main.py --dataset cifar10 --model resnet20 --lr 0.1 --batch_size 128 --method supervised_learning
