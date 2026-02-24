@@ -2,28 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-def generate_rotations(x):
-    '''
-    x: (B, C, H, W)
-    x_rot = (B, C, H, W) x 4 = (4B, C, H, W)
-    y_rot = (B,) x 4 = (4B,) for labels 0(0 degree), 1(90 degree), 2(180 degree), 3(270 degree)
-    '''
-    x0 = x
-    x1 = torch.rot90(x, k=1, dims=(2,3))
-    x2 = torch.rot90(x, k=2, dims=(2,3))
-    x3 = torch.rot90(x, k=3, dims=(2,3))
-    x_rot = torch.cat([x0, x1, x2, x3], dim=0)
-    
-    b = x.size(0)
-    
-    y0 = torch.zeros(b, device = x.device, dtype = torch.long)
-    y1 = torch.ones(b, device = x.device, dtype = torch.long)
-    y2 = torch.full((b,), 2, device = x.device, dtype = torch.long)
-    y3 = torch.full((b,), 3, device = x.device, dtype = torch.long)
-    y_rot = torch.cat([y0, y1, y2, y3], dim=0)
-    
-    return x_rot, y_rot
+from datasets import generate_rotations
 
 
 class RotNet(nn.Module):
@@ -43,7 +22,7 @@ class RotNet(nn.Module):
 
     # For evaluation(or monitoring)
     @ torch.no_grad()
-    def predict(self, x):
+    def predict_rotations(self, x):
         x_rot, _ = generate_rotations(x)
         features = self.encoder(x_rot)
         logits = self.classifier(features)

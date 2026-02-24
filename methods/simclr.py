@@ -24,13 +24,13 @@ class SimCLR(nn.Module):
     
     def forward(self, batch):
         # get two augmented views of the same batch from "datasets.py"
-        x1, x2 = batch
+        (x1, x2), _ = batch
         
-        # Encoder(Result: (B,D))
+        # Encoder(Result: (b, D))
         h1 = self.encoder(x1) 
         h2 = self.encoder(x2)
         
-        # Projection head(Result: (B,d))
+        # Projection head(Result: (b, d))
         z1 = self.projector(h1)
         z2 = self.projector(h2)
         
@@ -45,16 +45,19 @@ class SimCLR(nn.Module):
         b = z1.size(0)
         z = torch.cat([z1, z2], dim=0) # (2b, d)
     
+        # cosine simliarity logits
         logits = (z @ z.t()) / self.temperature # (2b, 2b)
-        logits.fill_diagonal_(1e-9)
+        
+        # remove self-similarity
+        mask = torch.eye(2*b, device = z.device, dtype=torch.bool)
+        logits = logits.masked_fill(mask, -1e9)
     
         # positive pairs: (i, i+b) and (i+b, i) (mod 2b)
-        idx = torch.arange(2*b, device=z.device)
-        pos_idx = (idx+b) % (2*b)
+        targets = torch.arange(2 * b, device=z.device)
+        targets = (targets + b) % (2 * b) # (2b,)
     
-        pos = logits[idx, pos_idx] # extract (0,b), (1,b+1), ... , (b,0), (b+1,2), ... from logits, shape: (2b,)
-    
-        loss = (-pos + torch.logsumexp(logits, dim=1)).mean()
+        # cross-entropy over 2b candidates
+        loss = F.cross_entropy(logits, targets)
         return loss
     
     
