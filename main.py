@@ -31,6 +31,15 @@ def parse_args():
     # SimSiam options
     parser.add_argument("--pred_hidden_dim", type=int, default=512)
     
+    # DINO options
+    parser.add_argument("--dino_hidden_dim", type=int, default=512)
+    parser.add_argument("--dino_bottleneck_dim", type=int, default=256)
+    parser.add_argument("--dino_output_dim", type=int, default=1024)
+    parser.add_argument("--student_temp", type=float, default=0.1)
+    parser.add_argument("--teacher_temp", type=float, default=0.04)
+    parser.add_argument("--center_momentum", type=float, default=0.9)
+    parser.add_argument("--teacher_momentum", type=float, default=0.996)
+    
     return parser.parse_args()
 
 
@@ -79,7 +88,11 @@ def main():
     elif args.method == "simsiam":
         model = Method(encoder, proj_hidden_dim=args.proj_hidden_dim, proj_output_dim=args.proj_output_dim, 
                        pred_hidden_dim=args.pred_hidden_dim).to(device)
-     
+    
+    elif args.method == "dino":
+        model = Method(encoder, hidden_dim=args.dino_hidden_dim, bottleneck_dim=args.dino_bottleneck_dim, output_dim=args.dino_output_dim, student_temp=args.student_temp, 
+                       teacher_temp=args.teacher_temp, center_momentum=args.center_momentum,teacher_momentum=args.teacher_momentum,).to(device)
+    
     else:
         raise ValueError(f"Unknown method: {args.method}")
         
@@ -100,6 +113,9 @@ def main():
             
             if args.method in ['moco_v1', 'moco_v2', 'byol']:
                 model.momentum_update() 
+            
+            if args.method == "dino":
+                model.update_teacher()
 
             running_loss += loss.item()
         
@@ -115,7 +131,7 @@ def main():
         test_acc = evaluate_rotnet(model, testloader, device)
         print(f"Final Rotation Test Accuracy: {test_acc*100:.2f}%")
         
-    elif args.method in ["simclr", "moco_v1", "moco_v2", "byol", "simsiam"]:
+    elif args.method in ["simclr", "moco_v1", "moco_v2", "byol", "simsiam", "dino"]:
         val_acc = knn_evaluation(model, feature_bank_loader, valloader, device)
         print(f"Final kNN Val Accuracy(k=1): {val_acc*100:.2f}%")
         

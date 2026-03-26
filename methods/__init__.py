@@ -4,6 +4,7 @@ from .simclr import SimCLR
 from .moco import MoCo
 from .byol import BYOL
 from .simsiam import SimSiam
+from .dino import DINO
 
 
 _METHODS = {
@@ -14,6 +15,7 @@ _METHODS = {
     "moco_v2": MoCo,
     "byol": BYOL,
     "simsiam": SimSiam,
+    "dino": DINO
 }
 
 def get_method(name: str):

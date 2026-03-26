@@ -39,6 +39,45 @@ class TwoTransform:
         
         return x1, x2
 
+class DINOTransform:
+    def __init__(self, global_crop_size=32, local_crop_size=16, local_crops_number=4):
+        self.local_crops_number = local_crops_number
+        
+        # global crop transform
+        self.global_transform = transforms.Compose([
+            transforms.RandomResizedCrop(global_crop_size, scale=(0.4, 1.0)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.2, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))], p=1.0),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+        
+        # local crop transform
+        self.local_transform = transforms.Compose([
+            transforms.RandomResizedCrop(local_crop_size, scale=(0.05, 0.4)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.2, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))], p=1.0),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+        
+    def __call__(self, x):
+        views = []
+            
+        # 2 global crops
+        views.append(self.global_transform(x))
+        views.append(self.global_transform(x))
+            
+        # local crops
+        for _ in range(self.local_crops_number):
+            views.append(self.local_transform(x))
+            
+        return views
+
 
 def get_transforms(img_size=32):
     # supervised / rotnet transform
@@ -74,11 +113,17 @@ def get_transforms(img_size=32):
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ]))
     
-    return train_transform, test_transform, ssl_transform_v1, ssl_transform_v2
+    dino_transform = DINOTransform(
+        global_crop_size=img_size,
+        local_crop_size=16,
+        local_crops_number=4
+    )
+    
+    return train_transform, test_transform, ssl_transform_v1, ssl_transform_v2, dino_transform
 
 
 def get_dataloaders(method_name, batch_size, img_size=32, val_ratio=0.2, root='./data', seed=42, num_workers=2):
-    train_transform, test_transform, ssl_transform_v1, ssl_transform_v2 = get_transforms(img_size)
+    train_transform, test_transform, ssl_transform_v1, ssl_transform_v2, dino_transform = get_transforms(img_size)
     
     if method_name in ['supervised_learning', 'rotnet']:
         selected_train_transform = train_transform
@@ -86,6 +131,8 @@ def get_dataloaders(method_name, batch_size, img_size=32, val_ratio=0.2, root='.
         selected_train_transform = ssl_transform_v1
     elif method_name in ['simclr', 'moco', 'moco_v2', 'byol', 'simsiam']:
         selected_train_transform = ssl_transform_v2
+    elif method_name in ['dino']:
+        selected_train_transform = dino_transform
     else:
         raise ValueError(f"Unknown method_name: {method_name}")
     

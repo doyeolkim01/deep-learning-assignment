@@ -19,15 +19,17 @@ class PatchEmbedding(nn.Module):
     def forward(self, x):
         batch_size, in_channels, height, width = x.shape
         patch_size = self.patch_size
-        grid_size = self.grid_size
-        num_patches = self.num_patches
-
-        assert height == self.img_size and width == self.img_size, (
-            f"Expected {(self.img_size, self.img_size)}, got {(height, width)}"
+        
+        assert height % patch_size == 0 and width % patch_size == 0, (
+            f"Input size {(height, width)} must be divisible by patch_size {patch_size}"
         )
+        
+        grid_h = height // patch_size
+        grid_w = width // patch_size
+        num_patches = grid_h * grid_w
 
         # reshape (B, C, H, W) -> (B, C, H/P, P, W/P, P)
-        x = x.reshape(batch_size, in_channels, grid_size, patch_size, grid_size, patch_size)
+        x = x.reshape(batch_size, in_channels, grid_h, patch_size, grid_w, patch_size)
         # reshape (B, C, H/P, P, W/P, P) -> (B, H/P, W/P, C, P, P)
         x = x.permute(0, 2, 4, 1, 3, 5).contiguous()
         # reshape (B, H/P, W/P, C, P, P) -> (B, N, C*P*P)
@@ -168,16 +170,49 @@ class VisionTransformer(nn.Module):
             elif isinstance(module, nn.LayerNorm):
                 nn.init.ones_(module.weight)
                 nn.init.zeros_(module.bias)
+                
+
+    def interpolate_pos_encoding(self, x, height, width):
+        patch_size = self.patch_embed.patch_size
+        grid_h = height // patch_size
+        grid_w = width // patch_size
+        num_patches = grid_h * grid_w
+
+        # x: (B, 1 + N, D)
+        N = x.shape[1] - 1
+        if N == self.pos_embed.shape[1] - 1:
+            return self.pos_embed
+
+        cls_pos_embed = self.pos_embed[:, :1, :]       # (1, 1, D)
+        patch_pos_embed = self.pos_embed[:, 1:, :]     # (1, old_N, D)
+
+        old_grid_size = int((patch_pos_embed.shape[1]) ** 0.5)
+        embed_dim = patch_pos_embed.shape[-1]
+
+        patch_pos_embed = patch_pos_embed.reshape(1, old_grid_size, old_grid_size, embed_dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)   # (1, D, H, W)
+
+        patch_pos_embed = F.interpolate(
+            patch_pos_embed,
+            size=(grid_h, grid_w),
+            mode="bicubic",
+            align_corners=False
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).reshape(1, num_patches, embed_dim)
+
+        return torch.cat([cls_pos_embed, patch_pos_embed], dim=1)
 
     def forward_features(self, x):
-        batch_size = x.size(0)
+        batch_size, _, height, width = x.shape
 
         x = self.patch_embed(x)  # (B, C, H, W) -> (B, N, D)
 
         cls_token = self.cls_token.expand(batch_size, -1, -1)  # (1, 1, D) -> (B, 1, D)
         x = torch.cat([cls_token, x], dim=1)  # (B, 1 + N, D)
 
-        x = x + self.pos_embed  # (B, 1 + N, D) + (1, 1 + N, D) -> (B, 1 + N, D), using broadcasting
+        pos_embed = self.interpolate_pos_encoding(x, height, width)
+        x = x + pos_embed  # (B, 1 + N, D) + (1, 1 + N, D) -> (B, 1 + N, D), using broadcasting
         x = self.pos_drop(x)
 
         for block in self.blocks:

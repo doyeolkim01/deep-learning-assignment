@@ -67,7 +67,11 @@ def evaluate_rotnet(model, dataloader, device):
 @torch.no_grad()
 def knn_evaluation(model, feature_bank_loader, valloader, device):
     model.eval()
-    encoder = model.encoder
+    
+    if hasattr(model, "student_encoder"):
+        encoder = model.student_encoder
+    elif hasattr(model, "encoder"):
+        encoder = model.encoder
     
     feature_bank = []
     feature_labels = []
